@@ -119,7 +119,7 @@ func (v *VirtletManager) RunPodSandbox(ctx context.Context, in *kubeapi.RunPodSa
 	glog.Infof("RunPodSandbox called for pod %s (%s)", name, podId)
 	glog.Infof("Sandbox config labels: %#v", config.GetLabels())
 	glog.Infof("Sandbox config annotations: %#v", config.GetAnnotations())
-	if err := v.boltClient.SetPodSandbox(config); err != nil {
+	if err := v.boltClient.SetPodSandbox(config, v.calicoClient); err != nil {
 		glog.Errorf("Error when creating pod sandbox for pod %s (%s): %#v", name, podId, err)
 		return nil, err
 	}
@@ -150,6 +150,11 @@ func (v *VirtletManager) RemovePodSandbox(ctx context.Context, in *kubeapi.Remov
 	}
 	if err := utils.RemovePersistentIface(devName, utils.Tap); err != nil {
 		glog.Errorf("Error when removing tapdev %s: %#v", devName, err)
+		return nil, err
+	}
+
+	if err := v.calicoClient.ReleaseByPodId(podId); err != nil {
+		glog.Errorf("Error when removing calico IPAM settings: %#v", err)
 		return nil, err
 	}
 

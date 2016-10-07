@@ -169,16 +169,9 @@ func (v *VirtletManager) CreateContainer(ctx context.Context, in *kubeapi.Create
 		return nil, err
 	}
 
-	uuid, err := v.libvirtVirtualizationTool.CreateContainer(in, imageFilepath)
+	uuid, err := v.libvirtVirtualizationTool.CreateContainer(v.boltClient, in, imageFilepath)
 	if err != nil {
 		glog.Errorf("Error when creating container: %#v", err)
-		return nil, err
-	}
-
-	if err := v.boltClient.SetLabels(in.Config.Metadata.GetName(), in.Config.Labels); err != nil {
-		return nil, err
-	}
-	if err := v.boltClient.SetAnnotations(in.Config.Metadata.GetName(), in.Config.Annotations); err != nil {
 		return nil, err
 	}
 
@@ -235,20 +228,6 @@ func (v *VirtletManager) ContainerStatus(ctx context.Context, in *kubeapi.Contai
 		glog.Errorf("Error when getting container status: %#v", err)
 		return nil, err
 	}
-
-	labels, err := v.boltClient.GetLabels(*in.ContainerId)
-	if err != nil {
-		glog.Errorf("Error when getting container status: %#v", err)
-		return nil, err
-	}
-	status.Labels = labels
-
-	annotations, err := v.boltClient.GetAnnotations(*in.ContainerId)
-	if err != nil {
-		glog.Errorf("Error when getting container status: %#v", err)
-		return nil, err
-	}
-	status.Annotations = annotations
 
 	response := &kubeapi.ContainerStatusResponse{Status: status}
 	glog.Infof("ContainerStatus response: %#v", response)

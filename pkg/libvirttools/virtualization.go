@@ -27,8 +27,8 @@ import "C"
 import (
 	"fmt"
 	"reflect"
-	"unsafe"
 	"strings"
+	"unsafe"
 
 	kubeapi "k8s.io/kubernetes/pkg/kubelet/api/v1alpha1/runtime"
 
@@ -235,7 +235,7 @@ func NewVirtualizationTool(conn C.virConnectPtr, poolName string, storageBackend
 	return &VirtualizationTool{conn: conn, volumeStorage: storageBackend, volumePool: pool, volumePoolName: poolName}, nil
 }
 
-func (v *VirtualizationTool) CreateContainer(in *kubeapi.CreateContainerRequest, imageFilepath string) (string, error) {
+func (v *VirtualizationTool) CreateContainer(boltClient *bolttools.BoltClient, in *kubeapi.CreateContainerRequest, imageFilepath string) (string, error) {
 	var name string
 	var memory int64
 	var vcpu int64
@@ -244,6 +244,8 @@ func (v *VirtualizationTool) CreateContainer(in *kubeapi.CreateContainerRequest,
 	if err != nil {
 		return "", err
 	}
+
+	boltClient.SetContainer(uuid, in.GetPodSandboxId(), in.GetConfig().GetImage().GetImage(), in.GetConfig().Labels, in.GetConfig().Annotations)
 
 	if in.Config.Metadata != nil && in.Config.Metadata.Name != nil {
 		name = *in.Config.Metadata.Name
@@ -375,31 +377,39 @@ func (v *VirtualizationTool) ListContainers(boltClient *bolttools.BoltClient, fi
 	for _, domain := range domains {
 		id := C.GoString(C.virDomainGetName(domain))
 
+		containerInfo, err := boltClient.GetContainerInfo(id)
+		if err != nil {
+			return nil, err
+		}
+
+		podSandboxId := containerInfo.SandboxId
+
 		if status := C.virDomainGetInfo(domain, &domainInfo); status < 0 {
 			return nil, GetLastError()
 		}
-
-		containerState := libvirtToKubeState(domainInfo)
 
 		metadata := &kubeapi.ContainerMetadata{
 			Name: &id,
 		}
 
-		labels, err := boltClient.GetLabels(id)
-		if err != nil {
-			return nil, err
-		}
-		annotations, err := boltClient.GetAnnotations(id)
-		if err != nil {
-			return nil, err
-		}
+		image := &kubeapi.ImageSpec{Image: &containerInfo.Image}
+
+		imageRef := containerInfo.Image
+
+		containerState := libvirtToKubeState(domainInfo)
+
+		createdAt := containerInfo.CreatedAt
 
 		container := &kubeapi.Container{
-			Id:          &id,
-			State:       &containerState,
-			Metadata:    metadata,
-			Labels:      labels,
-			Annotations: annotations,
+			Id:           &id,
+			PodSandboxId: &podSandboxId,
+			Metadata:     metadata,
+			Image:        image,
+			ImageRef:     &imageRef,
+			State:        &containerState,
+			CreatedAt:    &createdAt,
+			Labels:       containerInfo.Labels,
+			Annotations:  containerInfo.Annotations,
 		}
 
 		if filterContainer(container, filter) {

@@ -295,13 +295,17 @@ func (v *VirtletManager) PullImage(ctx context.Context, in *kubeapi.PullImageReq
 
 	filepath, err := v.libvirtImageTool.PullImage(name)
 	if err != nil {
-		glog.Errorf("Error when pulling image '%s': %#v", name, err)
+		glog.Errorf("Error when pulling image '%s': %v", name, err)
 		return nil, err
 	}
-	err = v.boltClient.SetImageFilepath(name, filepath)
-	if err != nil {
-		glog.Errorf("Error when setting filepath '%s' to image '%s': %#v", filepath, name, err)
-		return nil, err
+	if filepath != "" {
+		err = v.boltClient.SetImageFilepath(name, filepath)
+		if err != nil {
+			glog.Errorf("Error when setting filepath '%s' to image '%s': %v", filepath, name, err)
+			return nil, err
+		}
+	} else {
+		glog.Infof("Skipping download, we already have requested file for image: %s", name)
 	}
 
 	response := &kubeapi.PullImageResponse{}
